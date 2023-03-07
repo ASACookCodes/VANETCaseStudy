@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="utf-8"?><!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.1//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_1.dtd'><nta><declaration>//
+/**** Crib Notes ****/
+//
+
+//Integers can be up to 15 bits long.
+
+/**|  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  10 |  11 |  12 |  13 |  14 |  15 | **/
+/**--------------------------------------------------------------------------------------------**/
+// |  0  |  0  |  0  |  0  |  0  |  0  |  0  |  0  |  0  |  0  |  0  |  0  |  0  |  0  |  0  |
+// |16384| 8912| 4096| 2048| 1024| 512 | 256 | 128 |  64 |  32 |  16 |  8  |  4  |  2  |  1  |
+
+
+
+// We will reserve 5 bits for each message component, as the max length of a message in this protocol is 3 components long.
+// Therefore, all the components can be represented as integers between 1 and 31.
+
+//   EACH COMPONENT IS AS BELOW:
+////   |  0  |  0  |  0  |  0  |  0  |
+////   |  16 |  8  |  4  |  2  |  1  |
+
+
+// We reserve ranges of integers to represent certain TYPES as follows.
+// The following components are sent as part of messages in the protocol so are given types for type-checking purposes.
+// Other types, for instance, keys, are never sent and thus need no associated type.
+// All ranges are INCLUSIVE.
+
+
+//-------------------------------------------
+/**
+// Ciphertexts :: 1 to 6
+// Signatures :: 7 to 12
+// Certificates :: 13 to 18
+// Keys :: 19 to 31
+**/
+//-------------------------------------------
+
+
+//
+/** Declarations **/
+//
+
+//Movement
+bool inNode1, inNode2;
+bool vehicleInNode1, vehicleInNode2;
+bool isNode=true;
+
+//Communication
+chan node1, node2, initialise; // Public channels
+
+//Public Keys
+int PK_RSU1 = 10;
+int PK_V1 = 20;
+int PK_Attacker = 30;
+int RSUChoosePK; //Chosen communication by RSU
+int VehicleChoosePK; //Chosen communication by RSU
+
+//Cryptography
+int result, message;
+int param1, param2;
+
+//Messages
+int shift = 5;
+int unmask = 31;
+int cryptoheader = 7;
+bool step1, step2;
+
+//Verification
+bool certifiedvehicle;
+bool certifiedRSU;
+bool validSignature;
+
+bool cryptallowed = false;
+
+//Ciphertext Creation
+int plain[12];
+int key[12];
+int ciphertextindex=0;
+int signatureindex=7;
+int ciphermax = 6;
+int signaturemax=12;
+
+int encrypt(int param1, int param2) {
+  ciphertextindex+=1;
+  if (ciphertextindex &lt; ciphermax) {
+    plain[ciphertextindex] = param1;
+    key[ciphertextindex] = param2;
+    return ciphertextindex-cryptoheader;
+  }
+  return 0;
+}
+
+int decrypt(int param1, int param2) {
+  param1+=cryptoheader;
+  if (param1&lt;ciphermax &amp;&amp; key[param1]/10 == param2) {
+    return plain[param1];
+  }
+  return 0;
+}
+
+int sign(int param1, int param2) {
+  signatureindex+=1;
+  if (signatureindex &lt; signaturemax) {
+    plain[signatureindex] = param1;
+    key[signatureindex] = param2;
+    return signatureindex;
+  }
+  return 0;
+}
+
+int verify(int param1, int param2) {
+  if (param1&lt;signaturemax &amp;&amp; key[param1]*10 == param2) {
+    return plain[param1];
+  }
+  return 0;
+}
+
+
+
+
+//Nonce Creation
+int i = 19;
+int max = 31;
+int fresh() {
+  if (i&lt;max) {
+    i+=1;
+    return i;
+  }
+  return 0;
+}
+
+/*int nBob = 9;
+int maxBob = 11;
+int bobNonce() {
+  if (nBob&lt;maxBob) {
+    nBob+=1;
+    return nBob;
+  }
+  return 0;
+} */
+
+int nAttacker = 26;
+int maxAttacker = 31;
+int aNonce() {
+  if (nAttacker&lt;maxAttacker) {
+    nAttacker+=1;
+    return nAttacker;
+  }
+  return 0;
+}
+
+
+
+</declaration><template><name x="5" y="5">Responder</name><parameter>bool &amp;boolParam, int certificate</parameter><declaration>int receivedCertificate;
+int nonce;
+int signature;
+int rsuCert = 18;
+int MV1;
+int SK = 2;
+int SharedKey;
+
+bool enteredRSU1;
+bool MV1Sent;
+int eMV1;
+
+void checkCert() {
+  if (receivedCertificate &gt;=7 &amp;&amp; receivedCertificate &lt;= 12) { // Type Check
+   if (rsuCert == verify(receivedCertificate, VehicleChoosePK)) { //Check certificate
+    certifiedRSU = true;
+   }
+  }
+}
+</declaration><location id="id0" x="-462" y="0"><name x="-507" y="-12">Start</name></location><location id="id1" x="-256" y="221"><name x="-238" y="209">End</name></location><location id="id2" x="-462" y="65"><name x="-601" y="51">WaitingForRSUCert</name></location><location id="id3" x="-461" y="220"><name x="-620" y="203">BeginMV1Construction</name><committed/></location><location id="id4" x="-461" y="159"><name x="-626" y="149">ReceivedRSUCertificate</name><committed/></location><init ref="id0"/><transition><source ref="id0"/><target ref="id2"/><label kind="synchronisation" x="-528" y="16">initialise?</label></transition><transition><source ref="id3"/><target ref="id1"/><label kind="guard" x="-407" y="51">boolParam</label><label kind="synchronisation" x="-406" y="66">node1!</label><label kind="assignment" x="-406" y="81">SharedKey = fresh(),
+signature = sign( SharedKey, SK ),
+eMV1 = ( (certificate&lt;&lt;shift*2)|(SharedKey&lt;&lt;shift) ),
+eMV1 = eMV1|signature,
+MV1 = encrypt( eMV1, VehicleChoosePK ),
+message = MV1,
+MV1Sent = true,
+step1 = true,
+step2 = true</label></transition><transition><source ref="id2"/><target ref="id4"/><label kind="guard" x="-569" y="76">boolParam</label><label kind="synchronisation" x="-561" y="92">node1?</label><label kind="assignment" x="-656" y="107">receivedCertificate = message,
+checkCert()</label></transition><transition><source ref="id4"/><target ref="id3"/><label kind="guard" x="-594" y="174">certifiedRSU == true</label></transition></template><template><name>Initiator</name><parameter>bool &amp;boolParam</parameter><declaration>//Details
+int myCertificate = 18;
+int SK = 1;
+
+//Protocol Knowledge
+int receivedSharedKey;
+int receivedMV1;
+int receivedCertV1;
+int receivedSignature;
+
+//Flags for Verification
+bool receivedMV1message;
+bool sentCertificate;
+
+//Bounding
+int max = 2;
+int i = 0;
+
+
+
+
+</declaration><location id="id5" x="-287" y="65"><name x="-359" y="65">Initialised</name></location><location id="id6" x="-736" y="-126"><name x="-754" y="-155">StoreMsgComponents</name><committed/></location><location id="id7" x="-736" y="63"><name x="-742" y="74">SentRSUCert</name></location><location id="id8" x="-287" y="-125"><name x="-335" y="-153">Idling</name></location><init ref="id8"/><transition><source ref="id8"/><target ref="id5"/><label kind="synchronisation" x="-285" y="-63">initialise!</label><label kind="assignment" x="-285" y="-51">step1=false,
+step2=false</label></transition><transition><source ref="id7"/><target ref="id6"/><label kind="guard" x="-727" y="-90">boolParam</label><label kind="synchronisation" x="-727" y="-72">node1?</label><label kind="assignment" x="-729" y="-51">receivedMV1 = decrypt(message,SK),
+receivedSignature = receivedMV1&amp;unmask,
+receivedSharedKey = (receivedMV1&gt;&gt;shift)&amp;unmask,
+receivedCertV1 = (receivedMV1&gt;&gt;(shift*2))&amp;unmask</label></transition><transition><source ref="id6"/><target ref="id8"/><label kind="guard" x="-603" y="-233">verify(receivedSignature,RSUChoosePK) &amp;&amp;
+receivedSignature &lt;= 12 &amp;&amp;
+receivedSignature &gt;= 7 &amp;&amp;
+receivedSharedKey &gt;= 19 &amp;&amp;
+receivedSharedKey &lt;= 31 &amp;&amp;
+receivedCertV1 &lt;= 17 &amp;&amp;
+receivedCertV1 &gt;= 13</label><label kind="assignment" x="-604" y="-245">certifiedvehicle=true, i++</label></transition><transition><source ref="id5"/><target ref="id7"/><label kind="guard" x="-591" y="63">i &lt; max &amp;&amp; boolParam</label><label kind="synchronisation" x="-545" y="76">node1!</label><label kind="assignment" x="-619" y="87">message = sign(myCertificate,SK),
+sentCertificate = true,
+step1 = true</label></transition></template><template><name>Environment</name><parameter>bool &amp;boolParam</parameter><location id="id9" x="-729" y="-37"><name x="-717" y="-37">Node1</name></location><location id="id10" x="-509" y="-173"><name x="-514" y="-163">NML</name></location><init ref="id10"/><transition><source ref="id9"/><target ref="id10"/><label kind="assignment" x="-752" y="-187">boolParam=false,
+certifiedvehicle=false</label><nail x="-692" y="-143"/></transition><transition><source ref="id10"/><target ref="id9"/><label kind="assignment" x="-672" y="-92">boolParam=true</label><nail x="-568" y="-68"/></transition></template><template><name>Attacker</name><parameter>bool &amp;boolParam</parameter><declaration>int i;
+int pk;
+int max_op = 3;
+bool encrypted, decrypted, signed, verified, nonced;
+
+//Knowledge
+int sk = 3;
+int block;
+int rsuCert;
+int MV1; 
+int CertV1;
+int SharedKey;
+int signature;
+int nonce;
+int data, data2;
+</declaration><location id="id11" x="-959" y="-99"><name x="-978" y="-131">Nonce</name></location><location id="id12" x="-1415" y="-55"><name x="-1514" y="-44">MessageUpdated</name><committed/></location><location id="id13" x="-1175" y="-55"><name x="-1240" y="-35">BuildMessage</name><committed/></location><location id="id14" x="-726" y="-55"><name x="-734" y="-39">DYConstruction</name><committed/></location><location id="id15" x="-1280" y="-199"><name x="-1340" y="-187">ChooseEnc</name><committed/></location><location id="id16" x="-1048" y="-199"><name x="-1052" y="-232">ChooseKey</name><committed/></location><location id="id17" x="-888" y="-199"><name x="-921" y="-231">ChooseMC</name><committed/></location><location id="id18" x="-727" y="-395"><name x="-711" y="-403">DYAnalysis</name><committed/></location><location id="id19" x="-1141" y="-396"><name x="-1261" y="-410">DYSendReceive</name><committed/></location><location id="id20" x="-1224" y="-299"><name x="-1344" y="-299">StagedMessage</name></location><location id="id21" x="-1452" y="-386"><name x="-1490" y="-379">Idling</name></location><init ref="id21"/><transition><source ref="id19"/><target ref="id18"/><label kind="guard" x="-1095" y="-446">step1 &amp;&amp; !step2 &amp;&amp; rsuCert!=0</label><nail x="-1106" y="-427"/><nail x="-783" y="-427"/></transition><transition><source ref="id18"/><target ref="id21"/><nail x="-732" y="-513"/><nail x="-1492" y="-513"/><nail x="-1492" y="-387"/></transition><transition><source ref="id19"/><target ref="id18"/><label kind="guard" x="-1053" y="-507">!step1 &amp;&amp; !step2 &amp;&amp; !decrypted</label><nail x="-1113" y="-485"/><nail x="-759" y="-485"/></transition><transition><source ref="id21"/><target ref="id21"/><label kind="synchronisation" x="-1405" y="-398">initialise?</label><nail x="-1345" y="-405"/><nail x="-1345" y="-369"/></transition><transition><source ref="id21"/><target ref="id19"/><label kind="synchronisation" x="-1427" y="-467">initialise!</label><label kind="assignment" x="-1350" y="-468">step1 = false, step2 = false</label><nail x="-1451" y="-446"/><nail x="-1178" y="-447"/></transition><transition><source ref="id14"/><target ref="id13"/><label kind="assignment" x="-934" y="-14">data2 = sign(nonce, sk)</label><nail x="-764" y="6"/><nail x="-1105" y="6"/></transition><transition><source ref="id11"/><target ref="id13"/><label kind="assignment" x="-1072" y="-118">data2 = nonce</label><nail x="-1108" y="-99"/></transition><transition><source ref="id19"/><target ref="id18"/><label kind="guard" x="-1099" y="-372">step1 &amp;&amp; 
+step2 &amp;&amp; 
+decrypted</label><label kind="assignment" x="-973" y="-373">signature = data&amp;unmask,
+SharedKey = (data&gt;&gt;shift)&amp;unmask,
+CertV1 = (data&gt;&gt;(shift*2))&amp;unmask</label><nail x="-1112" y="-322"/><nail x="-743" y="-323"/></transition><transition><source ref="id19"/><target ref="id18"/><label kind="guard" x="-1101" y="-427">step1 &amp;&amp; 
+step2 &amp;&amp; 
+!decrypted &amp;&amp; MV1==0</label><label kind="assignment" x="-918" y="-423">MV1 = data</label><nail x="-1112" y="-379"/><nail x="-750" y="-380"/></transition><transition><source ref="id19"/><target ref="id18"/><label kind="guard" x="-1099" y="-482">step1 &amp;&amp; !step2 &amp;&amp; 
+rsuCert==0</label><label kind="assignment" x="-943" y="-470">rsuCert = data</label><nail x="-1102" y="-449"/><nail x="-782" y="-449"/></transition><transition><source ref="id16"/><target ref="id19"/><label kind="guard" x="-1104" y="-304">!decrypted &amp;&amp; block &lt; 0</label><label kind="assignment" x="-1103" y="-281">data = decrypt(block,sk),
+decrypted=true</label><nail x="-1131" y="-279"/></transition><transition><source ref="id12"/><target ref="id14"/><label kind="guard" x="-1111" y="19">i &lt; max_op</label><nail x="-1322" y="21"/><nail x="-775" y="21"/></transition><transition><source ref="id16"/><target ref="id20"/><label kind="assignment" x="-1228" y="-249">message = block</label><nail x="-1128" y="-246"/></transition><transition><source ref="id15"/><target ref="id20"/><label kind="guard" x="-1332" y="-240">block &gt; 0</label><label kind="assignment" x="-1437" y="-256">message = encrypt(block,pk)</label></transition><transition><source ref="id18"/><target ref="id14"/><label kind="assignment" x="-828" y="-159">data=0,result=0</label></transition><transition><source ref="id13"/><target ref="id12"/><label kind="assignment" x="-1343" y="-56">data=data2, i+=1</label></transition><transition><source ref="id12"/><target ref="id16"/><label kind="assignment" x="-1268" y="-138">block=data</label><nail x="-1415" y="-138"/><nail x="-1049" y="-138"/></transition><transition><source ref="id18"/><target ref="id17"/><label kind="assignment" x="-843" y="-199">data=0,result=0</label><nail x="-727" y="-199"/></transition><transition><source ref="id13"/><target ref="id12"/><label kind="assignment" x="-1371" y="-88">data=(data&lt;&lt;shift)|data2,
+i+=1</label><nail x="-1207" y="-87"/><nail x="-1391" y="-87"/></transition><transition><source ref="id14"/><target ref="id13"/><label kind="guard" x="-1067" y="-35">SharedKey != 0</label><label kind="assignment" x="-935" y="-34">data2 = SharedKey</label><nail x="-751" y="-16"/><nail x="-1119" y="-16"/></transition><transition><source ref="id14"/><target ref="id13"/><label kind="guard" x="-1066" y="-55">signature != 0</label><label kind="assignment" x="-935" y="-57">data2 = signature</label><nail x="-775" y="-34"/><nail x="-1119" y="-34"/></transition><transition><source ref="id14"/><target ref="id13"/><label kind="guard" x="-1067" y="-74">CertV1 != 0</label><label kind="assignment" x="-936" y="-75">data2 = CertV1</label><nail x="-773" y="-57"/><nail x="-1109" y="-57"/></transition><transition><source ref="id14"/><target ref="id13"/><label kind="guard" x="-1067" y="-93">rsuCert != 0</label><label kind="assignment" x="-936" y="-92">data2 = rsuCert</label><nail x="-773" y="-73"/><nail x="-1117" y="-73"/></transition><transition><source ref="id14"/><target ref="id11"/><label kind="guard" x="-935" y="-117">nonce == 0</label><label kind="assignment" x="-854" y="-118">nonce = fresh()</label><nail x="-766" y="-99"/></transition><transition><source ref="id16"/><target ref="id15"/><label kind="assignment" x="-1216" y="-174">pk = PK_RSU1</label><nail x="-1174" y="-175"/></transition><transition><source ref="id16"/><target ref="id15"/><label kind="assignment" x="-1205" y="-202">pk = PK_V1</label></transition><transition><source ref="id17"/><target ref="id16"/><label kind="guard" x="-996" y="-185">MV1 != 0</label><label kind="assignment" x="-996" y="-199">block = MV1</label></transition><transition><source ref="id19"/><target ref="id20"/><label kind="assignment" x="-1268" y="-392">message=data,
+decrypted=false,
+signed=false,
+verified=false,
+nonced=false</label><nail x="-1184" y="-311"/></transition><transition><source ref="id20"/><target ref="id21"/><label kind="guard" x="-1444" y="-320">boolParam</label><label kind="synchronisation" x="-1356" y="-320">node1!</label><nail x="-1451" y="-299"/></transition><transition><source ref="id21"/><target ref="id19"/><label kind="guard" x="-1446" y="-443">boolParam</label><label kind="synchronisation" x="-1358" y="-444">node1?</label><label kind="assignment" x="-1300" y="-443">i=0, data=message</label><nail x="-1452" y="-421"/><nail x="-1191" y="-422"/></transition></template><template><name>SCRSU</name><location id="id22" x="-7" y="68"><name x="-11" y="83">TalkToAttacker</name></location><location id="id23" x="-8" y="-46"><name x="-18" y="-76">TalksToVehicle</name></location><location id="id24" x="-220" y="5"><name x="-273" y="17">ChoosePK</name></location><init ref="id24"/><transition><source ref="id24"/><target ref="id22"/><label kind="assignment" x="-218" y="61">RSUChoosePK = PK_Attacker</label></transition><transition><source ref="id24"/><target ref="id23"/><label kind="assignment" x="-195" y="-59">RSUChoosePK = PK_V1</label></transition></template><template><name>SCVehicle</name><location id="id25" x="137" y="60"><name x="127" y="30">TalksToAttacker</name></location><location id="id26" x="140" y="-92"><name x="130" y="-122">TalksToRSU</name></location><location id="id27" x="-112" y="-17"><name x="-171" y="-51">ChoosePK</name></location><init ref="id27"/><transition><source ref="id27"/><target ref="id25"/><label kind="assignment" x="-95" y="49">VehicleChoosePK = PK_Attacker</label></transition><transition><source ref="id27"/><target ref="id26"/><label kind="assignment" x="-82" y="-103">VehicleChoosePK = PK_RSU1</label></transition></template><system>RSUScenarioChoice = SCRSU();
+V1ScenarioChoice = SCVehicle();
+
+VehicleAgent = Environment(vehicleInNode1);
+AttackerAgent = Environment(inNode1);
+
+VehicleBrain = Responder(vehicleInNode1,13);
+AttackerBrain = Attacker(inNode1);
+RSU1 = Initiator(isNode);
+
+system RSUScenarioChoice, V1ScenarioChoice, VehicleAgent, AttackerAgent, VehicleBrain, RSU1, AttackerBrain;
+</system></nta>
